@@ -1,0 +1,40 @@
+app: cdn
+
+handlers:
+  api:
+    file: Dockerfile
+    url: /
+    volumes:
+      static:
+        path: /storage
+    env_variables:
+    - name: NA_CDN_MINIO_HOST
+      value: "${MINIO_HOST}"
+    - name: NA_CDN_MINIO_PORT
+      value: "${MINIO_PORT}"
+    - name: NA_CDN_MINIO_ACCESS_KEY
+      value: "${MINIO_ACCESS_KEY}"
+    - name: NA_CDN_MINIO_SECRET_KEY
+      value: "${MINIO_SECRET_KEY}"
+    - name: NA_CDN_MINIO_REGION
+      value: "${MINIO_REGION}"
+    - name: NA_CDN_MINIO_SSL
+      value: "${MINIO_SSL}"
+    - name: NA_CDN_STORAGE_DIR
+      value: /storage
+    - name: NA_CDN_MGMT_PORT
+      value: "13000"
+    - name: NA_CDN_PORT
+      value: "3000"
+environments:
+  - name: prod
+    repository: git@gitlab.nextagilesoft.com:saas2/cdn.git#master
+    type: Docker
+    options:
+      api:
+        command:
+        - serve
+        ports:
+          7000: 3000
+          7001: 13000
+    cluster: animal
