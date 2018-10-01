@@ -1,4 +1,4 @@
-# Server for storing single page apps on Minio and serving them with node.js
+# Tiny Server for storing single page apps backed by S3
 
 Dependencies:
 - S3 server (like minio)
