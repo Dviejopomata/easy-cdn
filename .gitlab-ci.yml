@@ -6,6 +6,8 @@ build-cli:
   tags:
     - bare
   stage: build
+  only:
+    - master
   variables:
     IMAGE_NAME: "${CI_REGISTRY_IMAGE}/cli"
   script:
@@ -20,6 +22,8 @@ deploy-app:
     IMAGE_DEPLOY: $CI_REGISTRY/saas2/core:latest
   tags:
     - bare
+  only:
+    - master
   stage: deploy
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
