@@ -23,7 +23,7 @@ run-tests:
         --minioPort=${MINIO_PORT} 
         --minioAccessKey="${MINIO_ACCESS_KEY} "
         --minioSecretKey="${MINIO_SECRET_KEY}" 
-        --minioBucket="test-cdn-${CI_COMMIT_SHA}" 
+        --minioBucket="zz-ci-test-cdn-${CI_COMMIT_SHA}" 
         --minioSsl=${MINIO_SSL}`
     - export STATIC_FILE_SERVER=`docker port ${CONTAINER_ID} 3000`
     - export MGMT_FILE_SERVER=`docker port ${CONTAINER_ID} 13000`
