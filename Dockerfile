@@ -11,4 +11,6 @@ FROM gcr.io/distroless/nodejs:debug
 COPY --from=build-env /app /app
 WORKDIR /app
 CMD ["dist/cli.js"]
+EXPOSE 3000
+EXPOSE 13000
 ENTRYPOINT [ "/nodejs/bin/node", "dist/cli.js" ]

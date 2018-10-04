@@ -108,13 +108,6 @@ async function getMgmtServer(
   region: string,
 ) {
   fs.mkdirpSync(STORAGE_DIR)
-  try {
-    if (!(await minio.bucketExists(bucket))) {
-      await minio.makeBucket(bucket, region)
-    }
-  } catch (error) {
-    throw new Error(`Failed to make sure bucket is created ${error.message}`)
-  }
 
   class PostQuery {
     @IsDefined()
@@ -213,7 +206,7 @@ class ServeCommand {
       mgmtPort,
       minioBucket,
       port,
-    } = args
+    } = args    
     const minio = new Minio.Client({
       endPoint: minioHost,
       port: minioPort,
@@ -222,6 +215,9 @@ class ServeCommand {
       region: minioRegion,
       useSSL: minioSsl,
     })
+    if (!(await minio.bucketExists(minioBucket))) {
+      await minio.makeBucket(minioBucket, minioRegion)
+    }
     await syncDirectories(minio, minioBucket, "")
     try {
       const app = await getMgmtServer(minio, minioBucket, minioRegion)

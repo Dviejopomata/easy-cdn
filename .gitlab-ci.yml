@@ -1,15 +1,44 @@
 stages:
   - build
+  - test
   - deploy
 
+variables:
+  IMAGE_NAME: "${CI_REGISTRY_IMAGE}/cli-${CI_COMMIT_REF_SLUG}"
+
+run-tests:
+  tags:
+    - bare
+  stage: test
+  variables:
+    CI_CONTAINER_NAME: cdn-server-1
+    CI_FOLDER_TEST: /examples/page1
+    CI_HOST_TEST: example.org
+  script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
+    - docker rm ${CI_CONTAINER_NAME} -f || true
+    # launch server
+    - export CONTAINER_ID=`docker run -P --name ${CI_CONTAINER_NAME} -d ${IMAGE_NAME} serve
+        --minioHost="${MINIO_HOST}"
+        --minioPort=${MINIO_PORT} 
+        --minioAccessKey="${MINIO_ACCESS_KEY} "
+        --minioSecretKey="${MINIO_SECRET_KEY}" 
+        --minioBucket="test-cdn-${CI_COMMIT_SHA}" 
+        --minioSsl=${MINIO_SSL}`
+    - export STATIC_FILE_SERVER=`docker port ${CONTAINER_ID} 3000`
+    - export MGMT_FILE_SERVER=`docker port ${CONTAINER_ID} 13000`
+    # upload website
+    - docker run -v `pwd`${CI_FOLDER_TEST}:/page --rm --network=host ${IMAGE_NAME}  upload --mgmtUrl "http://${MGMT_FILE_SERVER}" -d /page --host ${CI_HOST_TEST}
+    # get html
+    - curl -H "Host:${CI_HOST_TEST}" "http://${STATIC_FILE_SERVER}" > output.html
+    # if files are not the same, then fail
+    - diff output.html examples/page1/index.html  | wc -l || exit 1
+    # cleanup
+    - docker rm $CONTAINER_ID -f
 build-cli:
   tags:
     - bare
-  stage: build
-  only:
-    - master
-  variables:
-    IMAGE_NAME: "${CI_REGISTRY_IMAGE}/cli"
+  stage: build  
   script:
   - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
   - docker build -t "${IMAGE_NAME}:${CI_COMMIT_SHA}" -f Dockerfile .

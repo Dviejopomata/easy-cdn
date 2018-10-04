@@ -27,6 +27,10 @@ class UploadCmd {
     tar
       .pack(srcdir, {})
       .pipe(zlib.createGzip())
+      .on("error", (err: any) => {
+        console.error(`Failed tarring the file ${err.message}`)
+        process.exit(1)
+      })      
       .pipe(fs.createWriteStream(tmpFile))
       .on("close", () => {
         request.post(
@@ -38,8 +42,7 @@ class UploadCmd {
           },
           async (err, _, body) => {
             if (err) console.log(err)
-            console.log(body)
-            console.log("done")
+            console.log(`Folder uploaded to host ${host}${p}`)
           },
         )
       })
