@@ -12,20 +12,13 @@
         "NODE_PATH": ".",
         "NODE_TLS_REJECT_UNAUTHORIZED": "0"
       },
-      "args": ["${relativeFile}"],
+      "outputCapture": "std",
+      // "console": "integratedTerminal",
+      "args": ["./src/cli.ts", "serve"],
       "runtimeArgs": ["-r", "ts-node/register"],
       "cwd": "${workspaceRoot}",
       "protocol": "inspector",
       "internalConsoleOptions": "openOnSessionStart"
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Launch Program",
-      "program": "${workspaceFolder}/index.js",
-      "outFiles": [
-        "${workspaceFolder}/**/*.js"
-      ]
     }
   ]
 }

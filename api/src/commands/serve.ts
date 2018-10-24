@@ -1,7 +1,11 @@
 import { IsDefined, IsFQDN, IsIn, IsString, validate } from "class-validator"
 import { plainToClass } from "class-transformer"
 import dotenv = require("dotenv")
+import os = require("os")
+import cors = require("cors")
 import zlib = require("zlib")
+import bodyParser = require("body-parser")
+
 import express = require("express")
 import fs = require("fs-extra-promise")
 import Minio = require("minio")
@@ -27,7 +31,127 @@ const VERSION_FILE_NAME = "VERSION"
 const ZIP_FORMAT = "zip"
 const TAR_FORMAT = "tar"
 const TARGZIP_FORMAT = "tar.gz"
+interface Domain {
+  domain: string
+  paths: DomainPath[]
+}
+interface DomainPath {
+  path: string
+  activeVersion: string
+  versions: DomainPathVersion[]
+}
+interface DomainPathVersion {
+  name: string
+  version: string
+  date: Date
+  size: number
+  etag: string
+}
+let domains: Domain[] = []
+async function updateDomains(
+  minio: Minio.Client,
+  bucket: string,
+  prefix: string = "",
+) {
+  domains = await getDirectories(minio, bucket, prefix)
+}
+async function getDirectories(
+  minio: Minio.Client,
+  bucket: string,
+  prefix: string = "",
+): Promise<Domain[]> {
+  return new Promise<Domain[]>(async (resolve, reject) => {
+    const stream = await minio.listObjectsV2(bucket, prefix, true)
+    const domains: Domain[] = []
+    const items: Minio.BucketItem[] = []
+    stream.on("data", function(obj) {
+      items.push(obj)
+    })
+    stream.on("end" as any, async () => {
+      for (const obj of items) {
+        const parts = obj.name.split("/")
+        const [domainName, ...rest] = parts
 
+        let domain: Domain | undefined = domains.find(
+          i => i.domain === domainName,
+        )
+        if (!domain) {
+          domain = {
+            domain: domainName,
+            paths: [],
+          }
+          domains.push(domain)
+        }
+        const pathname = rest.join("/")
+        const filename = path.basename(obj.name)
+        const pathname2 =
+          path.dirname(pathname) === "." ? "/" : path.dirname(pathname)
+
+        const version: DomainPathVersion = {
+          name: obj.name,
+          version: path.basename(filename, ".tar.gz"),
+          date: obj.lastModified,
+          size: obj.size,
+          etag: obj.etag,
+        }
+        let domainpath = domain.paths.find(i => i.path === pathname2)
+
+        if (filename === VERSION_FILE_NAME) {
+          const activeVersion = await readMinioFile(minio, bucket, obj.name)
+          if (!domainpath) {
+            domainpath = {
+              path: pathname2,
+              activeVersion: activeVersion,
+              versions: [version],
+            }
+            domain.paths.push(domainpath)
+          } else {
+            domainpath.activeVersion = activeVersion
+          }
+          continue
+        }
+        if (!domainpath) {
+          domainpath = {
+            path: pathname2,
+            activeVersion: "",
+            versions: [version],
+          }
+          domain.paths.push(domainpath)
+        } else {
+          domainpath.versions.push(version)
+        }
+      }
+      resolve(domains)
+    })
+  })
+}
+function setVersion(
+  minio: Minio.Client,
+  bucket: string,
+  objectname: string,
+  version: string,
+) {
+  log.info(`Setting version ${version} for ${objectname}`)
+  return minio.putObject(bucket, objectname, version)
+}
+function readMinioFile(
+  minio: Minio.Client,
+  bucket: string,
+  objectname: string,
+) {
+  return new Promise<string>(async (resolve, reject) => {
+    const data = await minio.getObject(bucket, objectname)
+    const chunks: any[] = []
+    data.on("data", function(chunk) {
+      chunks.push(chunk)
+    })
+    data.on("error", reject)
+    data.on("end", async () => {
+      const version = Buffer.concat(chunks).toString()
+      resolve(version)
+    })
+  })
+}
 async function syncDirectories(
   minio: Minio.Client,
   bucket: string,
@@ -86,6 +210,15 @@ async function syncDirectories(
 async function getStaticServer() {
   const app = express()
   app.use((req, res) => {
+    const domain = domains.find(d => d.domain === req.hostname)
+    if (domain) {
+      const domainpath = domain.paths
+        .sort((a, b) => b.path.length - a.path.length)
+        .find(i => req.path.startsWith(i.path))
+      if (domainpath) {
+        res.header("X-DEPLOY-CDN", domainpath.activeVersion)
+      }
+    }
     res.sendFile(
       path.join(
         STORAGE_DIR,
@@ -102,13 +235,9 @@ async function getStaticServer() {
   app.use(errorHandler)
   return app
 }
-async function getMgmtServer(
-  minio: Minio.Client,
-  bucket: string,
-  region: string,
-) {
+async function getMgmtServer(minio: Minio.Client, bucket: string) {
   fs.mkdirpSync(STORAGE_DIR)
-
+  await updateDomains(minio, bucket, "")
   class PostQuery {
     @IsDefined()
     @IsIn([ZIP_FORMAT, TAR_FORMAT, TARGZIP_FORMAT])
@@ -126,6 +255,58 @@ async function getMgmtServer(
       message: "alive",
     })
   })
+  app.use(cors())
+  app.get("/domains", async (req, res, next) => {
+    try {
+      res.json(domains)
+    } catch (error) {
+      next(error)
+    }
+  })
+  app.get("/domains/:name", async (req, res, next) => {
+    try {
+      res.json(domains.filter(i => i.domain === req.params.name))
+    } catch (error) {
+      next(error)
+    }
+  })
+  app.put(
+    "/domains/:name/paths/:path/version",
+    bodyParser.json(),
+    async (req, res, next) => {
+      try {
+        if (!req.body.version) {
+          res.status(400)
+          res.json({
+            message: "Version body is missing",
+          })
+          return
+        }
+        const domain = domains.find(i => i.domain === req.params.name)
+        if (domain) {
+          const domainpath = domain.paths.find(p => p.path === req.params.path)
+          if (domainpath) {
+            const prefix = path.join(domain.domain, domainpath.path)
+            await setVersion(
+              minio,
+              bucket,
+              path.join(prefix, VERSION_FILE_NAME),
+              req.body.version,
+            )
+            await syncDirectories(minio, bucket, prefix)
+            await updateDomains(minio, bucket, prefix)
+          } else {
+            res.sendStatus(404)
+          }
+          res.json(domains.filter(i => i.domain === req.params.name))
+        } else {
+          res.sendStatus(404)
+        }
+      } catch (error) {
+        next(error)
+      }
+    },
+  )
   app.post(
     "/",
     multer({ dest: path.join(process.cwd(), "uploads") }).single("file"),
@@ -206,7 +387,7 @@ class ServeCommand {
       mgmtPort,
       minioBucket,
       port,
-    } = args    
+    } = args
     const minio = new Minio.Client({
       endPoint: minioHost,
       port: minioPort,
@@ -220,7 +401,7 @@ class ServeCommand {
     }
     await syncDirectories(minio, minioBucket, "")
     try {
-      const app = await getMgmtServer(minio, minioBucket, minioRegion)
+      const app = await getMgmtServer(minio, minioBucket)
       const server = app.listen(mgmtPort, () => {
         const { address, port } = server.address() as AddressInfo
         log.info(`MGMT api listening on ${address}${port}`)
