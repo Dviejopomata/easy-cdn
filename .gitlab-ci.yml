@@ -23,7 +23,7 @@ run-tests:
     - export CONTAINER_ID=`docker run -P --name ${CI_CONTAINER_NAME} -d "${IMAGE_NAME}:${CI_COMMIT_SHA}" serve
         --minioHost="${MINIO_HOST}"
         --minioPort=${MINIO_PORT} 
-        --minioAccessKey="${MINIO_ACCESS_KEY} "
+        --minioAccessKey="${MINIO_ACCESS_KEY}"
         --minioSecretKey="${MINIO_SECRET_KEY}" 
         --minioBucket="zz-ci-test-cdn-${CI_COMMIT_SHA}" 
         --minioSsl=${MINIO_SSL}`
