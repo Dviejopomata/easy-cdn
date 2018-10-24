@@ -15,6 +15,7 @@ run-tests:
     CI_FOLDER_TEST: /examples/page1
     CI_HOST_TEST: example.org
   script:
+    - cd api
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
     - docker rm ${CI_CONTAINER_NAME} -f || true
     # launch server
