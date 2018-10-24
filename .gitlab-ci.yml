@@ -28,6 +28,7 @@ run-tests:
         --minioSsl=${MINIO_SSL}`
     - export STATIC_FILE_SERVER=`docker port ${CONTAINER_ID} 3000`
     - export MGMT_FILE_SERVER=`docker port ${CONTAINER_ID} 13000`
+    - sleep 6
     # upload website
     - docker run -v `pwd`${CI_FOLDER_TEST}:/page --rm --network=host ${IMAGE_NAME}  upload --mgmtUrl "http://${MGMT_FILE_SERVER}" -d /page --host ${CI_HOST_TEST}
     # get html
