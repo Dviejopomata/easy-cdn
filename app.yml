@@ -2,7 +2,7 @@ app: cdn
 
 handlers:
   api:
-    file: Dockerfile
+    file: api/Dockerfile
     url: /
     volumes:
       static:
