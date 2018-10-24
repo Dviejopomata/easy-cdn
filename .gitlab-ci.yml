@@ -81,7 +81,7 @@ deploy-dashboard:
   script:
   - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
   - cd ui
-  - docker build -t ${IMAGE_NAME} .
+  - docker build -e VUE_APP_API_URL="${CDN_BACKEND}" -t ${IMAGE_NAME} .
   - docker container rm ${CONTAINER_NAME} || true
   - docker container create --name ${CONTAINER_NAME} ${IMAGE_NAME}
   - docker cp ${CONTAINER_NAME}:/srv/http ./dist
