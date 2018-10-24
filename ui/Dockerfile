@@ -7,5 +7,5 @@ COPY . ./
 RUN yarn build 
 
 FROM scratch
-COPY --from=build-env /app/public /srv/http
+COPY --from=build-env /app/dist /srv/http
 CMD [ "tail","-f","/dev/null" ]
