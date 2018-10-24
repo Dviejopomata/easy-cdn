@@ -18,8 +18,9 @@ run-tests:
     - cd api
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
     - docker rm ${CI_CONTAINER_NAME} -f || true
+    - docker pull "${IMAGE_NAME}:${CI_COMMIT_SHA}"
     # launch server
-    - export CONTAINER_ID=`docker run -P --name ${CI_CONTAINER_NAME} -d ${IMAGE_NAME} serve
+    - export CONTAINER_ID=`docker run -P --name ${CI_CONTAINER_NAME} -d "${IMAGE_NAME}:${CI_COMMIT_SHA}" serve
         --minioHost="${MINIO_HOST}"
         --minioPort=${MINIO_PORT} 
         --minioAccessKey="${MINIO_ACCESS_KEY} "
