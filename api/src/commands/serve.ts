@@ -221,7 +221,10 @@ async function getStaticServer() {
           )
         );
       if (domainpath) {
-        reqPath =  domainpath.path === "" ? domainpath.path : `/${domainpath.path}`;
+        if (!mime.lookup(req.path)) {
+          reqPath =
+            domainpath.path === "" ? domainpath.path : `/${domainpath.path}`;
+        }
         res.header("X-DEPLOY-CDN", domainpath.activeVersion);
       }
     }
