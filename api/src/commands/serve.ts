@@ -1,22 +1,22 @@
-import { IsDefined, IsFQDN, IsIn, IsString, validate } from "class-validator";
-import { plainToClass } from "class-transformer";
-import dotenv = require("dotenv");
-import os = require("os");
-import cors = require("cors");
-import zlib = require("zlib");
 import bodyParser = require("body-parser");
-
+import { plainToClass } from "class-transformer";
+import { IsDefined, IsIn, IsString, validate } from "class-validator";
+import cors = require("cors");
+import micromatch = require("micromatch");
+import dotenv = require("dotenv");
 import express = require("express");
 import fs = require("fs-extra-promise");
+import mime = require("mime-types");
 import Minio = require("minio");
 import multer = require("multer");
-import yargs = require("yargs");
 import { AddressInfo } from "net";
 import path = require("path");
-import winston = require("winston");
-import { isObject } from "util";
 import tar = require("tar-fs");
-import mime = require("mime-types");
+import { isObject } from "util";
+import * as validator from "validator";
+import winston = require("winston");
+import yargs = require("yargs");
+import zlib = require("zlib");
 
 const log = winston.createLogger({
   format: winston.format.combine(
@@ -34,6 +34,7 @@ const TARGZIP_FORMAT = "tar.gz";
 interface Domain {
   domain: string;
   paths: DomainPath[];
+  wildcard: boolean;
 }
 interface DomainPath {
   path: string;
@@ -78,7 +79,8 @@ async function getDirectories(
         if (!domain) {
           domain = {
             domain: domainName,
-            paths: []
+            paths: [],
+            wildcard: domainName.startsWith("*")
           };
           domains.push(domain);
         }
@@ -210,7 +212,11 @@ async function syncDirectories(
 async function getStaticServer() {
   const app = express();
   app.use((req, res) => {
-    const domain = domains.find(d => d.domain === req.hostname);
+    const domain = domains.find(
+      d =>
+        d.domain === req.hostname ||
+        (d.wildcard && micromatch.isMatch(req.hostname, d.domain))
+    );
     let reqPath = req.path;
     if (domain) {
       const domainpath = domain.paths
@@ -227,14 +233,24 @@ async function getStaticServer() {
         }
         res.header("X-DEPLOY-CDN", domainpath.activeVersion);
       }
+      res.sendFile(
+        path.join(
+          STORAGE_DIR,
+          domain.wildcard ? domain.domain : req.hostname,
+          mime.lookup(reqPath) ? reqPath : `${reqPath}/index.html`
+        )
+      );
+    } else {
+      res.sendFile(
+        path.join(
+          STORAGE_DIR,
+          req.hostname,
+          mime.lookup(reqPath) ? reqPath : `${reqPath}/index.html`
+        )
+      );
     }
-    res.sendFile(
-      path.join(
-        STORAGE_DIR,
-        req.hostname,
-        mime.lookup(reqPath) ? reqPath : `${reqPath}/index.html`
-      )
-    );
+    
+    
   });
 
   const errorHandler: express.ErrorRequestHandler = (err, req, res, next) => {
@@ -252,7 +268,6 @@ async function getMgmtServer(minio: Minio.Client, bucket: string) {
     @IsIn([ZIP_FORMAT, TAR_FORMAT, TARGZIP_FORMAT])
     format!: string;
     @IsDefined()
-    @IsFQDN()
     host!: string;
     @IsString()
     @IsDefined()
@@ -332,6 +347,22 @@ async function getMgmtServer(minio: Minio.Client, bucket: string) {
         if (!!errors.length) {
           res.status(400);
           res.json(errors);
+          return;
+        }
+        const host = query.host;
+        const validHost = host.startsWith("*") || validator.isFQDN(host);
+        if (!validHost) {
+          res.status(400);
+
+          res.json([
+            {
+              value: host,
+              property: host,
+              contraints: {
+                isFqdn: "Host must be a valid domain name"
+              }
+            }
+          ]);
           return;
         }
         if (!req.file) {
