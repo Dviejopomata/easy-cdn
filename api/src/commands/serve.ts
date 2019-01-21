@@ -249,8 +249,6 @@ async function getStaticServer() {
         )
       );
     }
-    
-    
   });
 
   const errorHandler: express.ErrorRequestHandler = (err, req, res, next) => {
@@ -388,10 +386,11 @@ async function getMgmtServer(minio: Minio.Client, bucket: string) {
           metadata
         );
         await minio.putObject(bucket, versionName, time.toString());
+        await syncDirectories(minio, bucket, folder);
+        await updateDomains(minio, bucket);
         res.json({
           message: "Upload successfully"
         });
-        syncDirectories(minio, bucket, folder);
         fs.unlink(req.file.path, err => {
           if (err) {
             log.error(
